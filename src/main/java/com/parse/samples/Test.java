@@ -1,38 +1,20 @@
 package com.parse.samples;
 
-import org.apache.commons.lang3.StringUtils;
-
 public class Test {
+
+	public static String getReply(String message) {
+		return "how are you?".equals(message) ? "I am fine. Thanks :)" : "How are you doing?";
+	}
 
 	public static void main(String[] args) {
 
-		if (StringUtils.equalsAny("adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", // perform
-																														// addition
-																														// block-wise,
-																														// to
-																														// ensure
-																														// good
-																														// cache
-																														// behavior
-				"adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd",
-				"adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd",
-				"adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd",
-				"adasdasdasdasdasd")) {
-			System.out.println("cool");
-		} else if (StringUtils.equalsAny("adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd",
-				"adasdasdasdasdasd", // perform
-				// addition
-				// block-wise,
-				// to
-				// ensure
-				// good
-				// cache
-				// behavior
-				"adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd",
-				"adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd",
-				"adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd", "adasdasdasdasdasd",
-				"adasdasdasdasdasd")) {
-			System.out.println("cool");
+		String message = "how are you?";
+		String reply = "how are you?".equals(message) ? "I am fine. Thanks :)" : "How are you doing?";
+		System.out.println(reply);
+
+		int i = 0;
+		while (i++ < 10) {
+			System.out.println("Cool");
 		}
 	}
 }

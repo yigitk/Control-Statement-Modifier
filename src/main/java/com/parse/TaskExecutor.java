@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
@@ -29,6 +30,11 @@ import com.parse.utils.PredicateRecorder;
 public class TaskExecutor {
 
 	private static Formatter formatter = new Formatter(JavaFormatterOptions.builder().style(Style.GOOGLE).build());
+
+	/**
+	 * The list of predicate information
+	 */
+	private static List<PredicateInfo> predicateInfoList;
 
 	/**
 	 * Processes the for loop
@@ -58,7 +64,7 @@ public class TaskExecutor {
 		PredicateInfo predicateInfo = PredicateParser.processForStatement(statementBuilder.toString());
 
 		if (predicateInfo != null) {
-			PredicateRecorder.record(predicateInfo.getReuseStatement());
+			predicateInfoList.add(predicateInfo);
 			updatedLines.add(spaces + predicateInfo.getVarInitializationStatement());
 			updatedLines.add(spaces + predicateInfo.getInitializationStatement());
 			updatedLines.add(spaces + predicateInfo.getParentStatement());
@@ -127,7 +133,7 @@ public class TaskExecutor {
 		PredicateInfo predicateInfo = PredicateParser.processWhileStatement(statementBuilder.toString());
 
 		if (predicateInfo != null) {
-			PredicateRecorder.record(predicateInfo.getReuseStatement());
+			predicateInfoList.add(predicateInfo);
 			updatedLines.add(spaces + predicateInfo.getInitializationStatement());
 			updatedLines.add(spaces + predicateInfo.getParentStatement());
 		}
@@ -208,7 +214,7 @@ public class TaskExecutor {
 
 		PredicateInfo predicateInfo = PredicateParser.processDoWhileStatement(statementBuilder.toString());
 		if (predicateInfo != null) {
-			PredicateRecorder.record(predicateInfo.getReuseStatement());
+			predicateInfoList.add(predicateInfo);
 			updatedLines.add(spaces + "\t" + predicateInfo.getReuseStatement());
 			updatedLines.add(spaces + predicateInfo.getParentStatement());
 		}
@@ -260,7 +266,7 @@ public class TaskExecutor {
 		PredicateInfo predicateInfo = PredicateParser.processIfStatement(statementBuilder.toString());
 
 		if (predicateInfo != null) {
-			PredicateRecorder.record(predicateInfo.getReuseStatement());
+			predicateInfoList.add(predicateInfo);
 			updatedLines.add(pos++, spaces + predicateInfo.getInitializationStatement());
 			updatedLines.add(spaces + predicateInfo.getParentStatement());
 		}
@@ -335,7 +341,7 @@ public class TaskExecutor {
 			PredicateInfo predicateInfo = PredicateParser.processElseIfStatement(statementBuilder.toString());
 
 			if (predicateInfo != null) {
-				PredicateRecorder.record(predicateInfo.getReuseStatement());
+				predicateInfoList.add(predicateInfo);
 				updatedLines.add(pos++, spaces + predicateInfo.getInitializationStatement());
 				updatedLines.add(spaces + predicateInfo.getParentStatement());
 			}
@@ -373,6 +379,44 @@ public class TaskExecutor {
 		}
 
 		return bodyLineCounter;
+	}
+
+	/**
+	 * Processes the ternary assignment if found
+	 * 
+	 * @param lines
+	 * @param updatedLines
+	 * @param startPos
+	 * @param totalLines
+	 * @return
+	 */
+	private static int processTernaryAssignmentIfFound(List<String> lines, List<String> updatedLines, int startPos,
+			int totalLines, boolean isReturnStatement) {
+
+		// Getting the current indentation of for statement
+		int indentedSpaceCount = IndentSpaceParser.getIndentSpacesCount(lines.get(startPos));
+
+		// The statement might be present in multiple lines, thus merging all
+		StringBuilder statementBuilder = new StringBuilder();
+		statementBuilder.append(removeComment(lines.get(startPos)));
+		startPos++;
+
+		while (IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount) {
+			statementBuilder.append(removeComment(lines.get(startPos)));
+			startPos++;
+		}
+
+		PredicateInfo predicateInfo = PredicateParser.processTernaryStatement(statementBuilder.toString(),
+				isReturnStatement);
+		if (predicateInfo != null) {
+			predicateInfoList.add(predicateInfo);
+			updatedLines.add(predicateInfo.getInitializationStatement());
+			updatedLines.add(predicateInfo.getParentStatement());
+		} else {
+			updatedLines.add(statementBuilder.toString());
+		}
+
+		return startPos - 1;
 	}
 
 	/**
@@ -499,6 +543,18 @@ public class TaskExecutor {
 				i = processIfElseifElse(lines, updatedLines, i, totalLines);
 				System.out.println(
 						String.format("Processing of if statements completed. Line no: %d", parentLineNumber + i));
+			} else if (lines.get(i).trim().matches("^\\w+ \\w+ \\=.*")) {
+				System.out.println(
+						String.format("Processing of ternary stament started. Line no: %d", parentLineNumber + i));
+				i = processTernaryAssignmentIfFound(lines, updatedLines, i, totalLines, false);
+				System.out.println(
+						String.format("Processing of ternary stament completed. Line no: %d", parentLineNumber + i));
+			} else if (lines.get(i).trim().matches("^return.*")) {
+				System.out.println(
+						String.format("Processing of ternary stament started. Line no: %d", parentLineNumber + i));
+				i = processTernaryAssignmentIfFound(lines, updatedLines, i, totalLines, true);
+				System.out.println(
+						String.format("Processing of ternary stament completed. Line no: %d", parentLineNumber + i));
 			} else {
 				updatedLines.add(lines.get(i));
 			}
@@ -545,6 +601,7 @@ public class TaskExecutor {
 
 		try {
 			String formattedJava = CodeFormatter.format(Paths.get(args[1]));
+			predicateInfoList = new ArrayList<>();
 			List<String> updatedLines = process(Arrays.asList(formattedJava.split("\n")), 0);
 
 			// Saving the updated code
@@ -556,6 +613,11 @@ public class TaskExecutor {
 			String formattedUpdatedCode = formatter.formatSource(codeBuilder.toString());
 			saveUpdatedCode(formattedUpdatedCode,
 					args[0] + File.separator + args[1].substring(args[1].lastIndexOf(File.separator) + 1));
+
+			// Creating the predicates file
+			PredicateRecorder.create(
+					args[0] + File.separator + args[1].substring(args[1].lastIndexOf(File.separator) + 1),
+					predicateInfoList);
 		} catch (FormatterException formatterException) {
 			System.out.println("Error formatting the code.");
 		}

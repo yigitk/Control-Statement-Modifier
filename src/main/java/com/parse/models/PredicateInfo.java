@@ -11,6 +11,16 @@ public class PredicateInfo {
 	private String name;
 
 	/**
+	 * The predicate control
+	 */
+	private String control;
+
+	/**
+	 * The predicate type
+	 */
+	private String type;
+
+	/**
 	 * The predicate initialization statement
 	 */
 	private String initializationStatement;
@@ -35,20 +45,13 @@ public class PredicateInfo {
 	 */
 	private String varChangeStatement;
 
-	/**
-	 * Instantiating the predicate information.
-	 * 
-	 * @param name
-	 * @param initializationStatement
-	 * @param reuseStatement
-	 * @param parentStatement
-	 * @param varInitializationStatement
-	 * @param varChangeStatement
-	 */
-	public PredicateInfo(String name, String initializationStatement, String reuseStatement, String parentStatement,
-			String varInitializationStatement, String varChangeStatement) {
+	public PredicateInfo(String name, String control, String type, String initializationStatement,
+			String reuseStatement, String parentStatement, String varInitializationStatement,
+			String varChangeStatement) {
 		super();
 		this.name = name;
+		this.control = control;
+		this.type = type;
 		this.initializationStatement = initializationStatement;
 		this.reuseStatement = reuseStatement;
 		this.parentStatement = parentStatement;
@@ -62,6 +65,22 @@ public class PredicateInfo {
 
 	public void setName(String name) {
 		this.name = name;
+	}
+
+	public String getControl() {
+		return control;
+	}
+
+	public void setControl(String control) {
+		this.control = control;
+	}
+
+	public String getType() {
+		return type;
+	}
+
+	public void setType(String type) {
+		this.type = type;
 	}
 
 	public String getInitializationStatement() {
