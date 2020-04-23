@@ -1,6 +1,8 @@
 package com.parse.utils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
@@ -8,6 +10,7 @@ import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 
+import com.parse.models.Case;
 import com.parse.models.PredicateInfo;
 import com.parse.models.ReplacementInfo;
 
@@ -50,12 +53,23 @@ public class PredicateParser {
 	/**
 	 * The ternary statement pattern at initialization
 	 */
-	private static final Pattern TERNARY_STATEMENT_PATTERN_INIT = Pattern.compile("(\\w+ \\w+ \\= )(.*)(\\?.*\\:.*)");
+	private static final Pattern TERNARY_STATEMENT_PATTERN_INIT = Pattern
+			.compile("((\\w+ )?\\w+ \\= )(.*)(\\?.*\\:.*)");
 
 	/**
 	 * The ternary statement pattern at return
 	 */
 	private static final Pattern TERNARY_STATEMENT_PATTERN_RETURN = Pattern.compile("(return )(.*)(\\?.*\\:.*)");
+
+	/**
+	 * The switch pattern
+	 */
+	private static final Pattern SWITCH_PATTERN = Pattern.compile("switch \\((.*)\\)");
+
+	/**
+	 * The switch case pattern
+	 */
+	private static final Pattern SWITCH_CASE_PATTERN = Pattern.compile("case (.*)\\:");
 
 	private PredicateParser() {
 		// Its a utility class. Thus instantiation is not allowed.
@@ -210,26 +224,24 @@ public class PredicateParser {
 	}
 
 	/**
-	 * Processes the ternary statement
+	 * Processes the initialization ternary statement
 	 * 
-	 * @param statement         The statement
-	 * @param isReturnStatement if the statement is return statement
+	 * @param statement The statement
 	 * @return The predicate information
 	 */
-	public static PredicateInfo processTernaryStatement(String statement, boolean isReturnStatement) {
+	public static PredicateInfo processInitializationTernaryStatement(String statement) {
 
 		ReplacementInfo replacementInfo = replaceStrings(statement);
-		Matcher matcher = (isReturnStatement ? TERNARY_STATEMENT_PATTERN_RETURN : TERNARY_STATEMENT_PATTERN_INIT)
-				.matcher(replacementInfo.getUpdatedString());
+		Matcher matcher = TERNARY_STATEMENT_PATTERN_INIT.matcher(replacementInfo.getUpdatedString());
 		if (matcher.find()) {
-			String control = matcher.group(2);
+			String control = matcher.group(3);
 			// Reverting back the replacements in predicate
 			for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
 				control = control.replaceAll(entry.getKey(), entry.getValue());
 			}
 
 			String predicateName = "P_" + predicateCounter.getAndIncrement();
-			String parentStatement = StringUtils.join(matcher.group(1), predicateName, matcher.group(3));
+			String parentStatement = StringUtils.join(matcher.group(1), predicateName, matcher.group(4));
 			// Reverting back the replacements in predicate
 			for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
 				parentStatement = parentStatement.replaceAll(entry.getKey(), entry.getValue());
@@ -240,5 +252,164 @@ public class PredicateParser {
 					StringUtils.join(predicateName, "=", control, ";"), parentStatement, null, null);
 		}
 		return null;
+	}
+
+	/**
+	 * Checks if the brackets are equal in the statements
+	 * 
+	 * @param statement The statement
+	 * @return The equality status
+	 */
+	private static boolean areBracketsEqual(String statement) {
+
+		char[] chars = statement.toCharArray();
+		int open = 0;
+		int close = 0;
+		for (char ch : chars) {
+			if (ch == '(') {
+				open++;
+			} else if (ch == ')') {
+				close++;
+			}
+		}
+
+		return open == close;
+	}
+
+	/**
+	 * Processes the return ternary statement
+	 * 
+	 * @param statement The statement
+	 * @return The predicate information
+	 */
+	public static PredicateInfo processReturnTernaryStatement(String statement) {
+
+		ReplacementInfo replacementInfo = replaceStrings(statement);
+		Matcher matcher = TERNARY_STATEMENT_PATTERN_RETURN.matcher(replacementInfo.getUpdatedString());
+		if (matcher.find()) {
+			String updatedString = replacementInfo.getUpdatedString();
+			int refIndex = updatedString.indexOf("?");
+			if (!areBracketsEqual(updatedString.substring(0, refIndex))) { // The ternary statement is present inside
+																			// parenthesis
+				StringBuilder statementBuilder = new StringBuilder();
+				statementBuilder.append(" )");
+				int count = 1;
+				int index = refIndex - 3;
+				while (index >= 0 && count != 0) {
+					char ch = updatedString.charAt(index);
+					if (ch == '(') {
+						count--;
+					} else if (ch == ')') {
+						count++;
+					}
+					index--;
+					statementBuilder.append(ch);
+				}
+				index++;
+
+				String control = statementBuilder.reverse().toString();
+
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					control = control.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				String predicateName = "P_" + predicateCounter.getAndIncrement();
+				String parentStatement = StringUtils.join(updatedString.substring(0, index), predicateName,
+						updatedString.substring(refIndex));
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					parentStatement = parentStatement.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				return new PredicateInfo(predicateName, control, "TERNARY",
+						StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
+						StringUtils.join(predicateName, "=", control, ";"), parentStatement, null, null);
+
+			} else {
+				String control = matcher.group(2);
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					control = control.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				String predicateName = "P_" + predicateCounter.getAndIncrement();
+				String parentStatement = StringUtils.join(matcher.group(1), predicateName, matcher.group(3));
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					parentStatement = parentStatement.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				return new PredicateInfo(predicateName, control, "TERNARY",
+						StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
+						StringUtils.join(predicateName, "=", control, ";"), parentStatement, null, null);
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Gets the first switch operand
+	 * 
+	 * @param statement The switch statement
+	 * @return The first operand
+	 */
+	public static String getSwitchFirstOperand(String statement) {
+
+		Matcher matcher = SWITCH_PATTERN.matcher(statement);
+		if (matcher.find()) {
+			return matcher.group(1);
+		}
+		return StringUtils.EMPTY;
+	}
+
+	/**
+	 * Parses the cases from switch inner body
+	 * 
+	 * @param switchBodyLines The switch body lines
+	 * @return The cases
+	 */
+	public static List<Case> processCases(List<String> switchBodyLines) {
+
+		List<Case> cases = new ArrayList<>();
+
+		if (!switchBodyLines.isEmpty()) {
+			int totalInnerBodyLines = switchBodyLines.size();
+			int lineCounter = 0;
+			int spaceCount = IndentSpaceParser.getIndentSpacesCount(switchBodyLines.get(0));
+			String spaces = IndentSpaceParser.getIndentSpaces(switchBodyLines.get(0));
+
+			while (lineCounter < totalInnerBodyLines) {
+				String line = switchBodyLines.get(lineCounter);
+				if (!line.trim().equals("default:") && line.endsWith("default:")) {
+					line = line.substring(0, line.lastIndexOf("default:"));
+					switchBodyLines.add(lineCounter + 1, spaces + "default:");
+					totalInnerBodyLines++;
+				}
+
+				Matcher matcher = SWITCH_CASE_PATTERN.matcher(line.trim());
+				String operand = "";
+				if (matcher.find()) {
+					operand = matcher.group(1);
+				}
+
+				List<String> body = new ArrayList<>();
+				boolean withBreak = false;
+
+				lineCounter++;
+				while (lineCounter < totalInnerBodyLines
+						&& IndentSpaceParser.getIndentSpacesCount(switchBodyLines.get(lineCounter)) > spaceCount) {
+					if (switchBodyLines.get(lineCounter).trim().equals("break;")) {
+						withBreak = true;
+						lineCounter++;
+						break;
+					}
+					body.add(switchBodyLines.get(lineCounter));
+					lineCounter++;
+				}
+				cases.add(new Case(operand, body, withBreak));
+			}
+		}
+		return cases;
 	}
 }

@@ -1,9 +1,11 @@
 package com.parse.utils;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -39,18 +41,32 @@ public class PredicateRecorder {
 	}
 
 	/**
+	 * Gets the file name
+	 * 
+	 * @return The file name
+	 */
+	private static String getFileName(Path codePath) {
+
+		String completeFileName = codePath.toString().substring(codePath.toString().lastIndexOf(File.separator) + 1);
+		return completeFileName.substring(0, completeFileName.lastIndexOf("."));
+	}
+
+	/**
 	 * Creates the predicate file
 	 * 
-	 * @param The               code path
+	 * @param codePath          The code path
+	 * @param outputDirectory   The output directory
+	 * 
 	 * @param predicateInfoList The predicates info list
 	 */
-	public static void create(String codePath, List<PredicateInfo> predicateInfoList) {
+	public static void create(Path codePath, Path outputDirectory, List<PredicateInfo> predicateInfoList) {
 
 		HashMap<String, String> predicateLineNumberMap = new HashMap<>();
 		predicateInfoList.forEach(predicateInfo -> predicateLineNumberMap.put(predicateInfo.getName(), ""));
 
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter("predicates.txt", true))) {
-			List<String> lines = Files.readAllLines(Paths.get(codePath));
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(
+				Paths.get(outputDirectory.toString() + File.separator + getFileName(codePath) + ".txt").toFile()))) {
+			List<String> lines = Files.readAllLines(codePath);
 			Integer lineNumber = 1;
 			for (String line : lines) {
 				Matcher matcher = PREDICATE_PATTERN.matcher(line.trim());
