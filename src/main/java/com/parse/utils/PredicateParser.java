@@ -69,10 +69,66 @@ public class PredicateParser {
 	/**
 	 * The switch case pattern
 	 */
-	private static final Pattern SWITCH_CASE_PATTERN = Pattern.compile("case (.*)\\:");
+	private static final Pattern SWITCH_CASE_PATTERN = Pattern.compile("[case|default]( .*)?\\:");
 
 	private PredicateParser() {
 		// Its a utility class. Thus instantiation is not allowed.
+	}
+
+	/**
+	 * Processes the var initialization statement
+	 * 
+	 * @param statement The statement
+	 * @return The processed statement
+	 */
+	private static String processVarInitializationStatement(String statement) {
+
+		if (statement.trim().matches("^[\\w_]+ [\\w_]+ \\=.*")) {
+			return statement + ";";
+		} else {
+			char[] chars = statement.trim().toCharArray();
+			int totalChars = chars.length;
+			int bracketCount = 0;
+			for (int i = 0; i < totalChars; i++) {
+				if (chars[i] == '(' || chars[i] == '<' || chars[i] == '{' || chars[i] == '[') {
+					bracketCount++;
+				} else if (chars[i] == ')' || chars[i] == '>' || chars[i] == '}' || chars[i] == ']') {
+					bracketCount--;
+				} else if (chars[i] == ',') {
+					if (bracketCount == 0) {
+						chars[i] = ';';
+					}
+				}
+			}
+
+			return new String(chars) + ";";
+		}
+	}
+
+	/**
+	 * Processes the var change statement
+	 * 
+	 * @param statement The statement
+	 * @return The processed statement
+	 */
+	private static String processVarChangeStatement(String statement) {
+
+		char[] chars = statement.trim().toCharArray();
+		int totalChars = chars.length;
+		int bracketCount = 0;
+		for (int i = 0; i < totalChars; i++) {
+			if (chars[i] == '(') {
+				bracketCount++;
+			} else if (chars[i] == ')') {
+				bracketCount--;
+			} else if (chars[i] == ',') {
+				if (bracketCount == 0) {
+					chars[i] = ';';
+				}
+			}
+		}
+
+		return new String(chars) + ";";
 	}
 
 	/**
@@ -86,15 +142,19 @@ public class PredicateParser {
 		Matcher matcher = FOR_PATTERN.matcher(statement);
 		if (matcher.find()) {
 			String control = matcher.group(2).trim();
-			if (StringUtils.isBlank(control)) {
-				control = "true";
+			if (StringUtils.isBlank(control) || StringUtils.equals("true", control)) {
+				return null;
 			}
+
+			String varInitializationStatement = processVarInitializationStatement(matcher.group(1));
+			String varChangeStatement = processVarChangeStatement(matcher.group(3));
+
 			String predicateName = "P_" + predicateCounter.getAndIncrement();
 			return new PredicateInfo(predicateName, control, "FOR",
 					StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
 					StringUtils.join(predicateName, "=", control, ";"),
-					StringUtils.join("while(", predicateName, ")", "{"), matcher.group(1) + ";",
-					matcher.group(3).replaceAll(",", ";") + ";");
+					StringUtils.join("while(", predicateName, ")", "{"), varInitializationStatement,
+					varChangeStatement);
 		}
 		return null;
 	}
@@ -110,11 +170,13 @@ public class PredicateParser {
 		Matcher matcher = WHILE_PATTERN.matcher(statement);
 		if (matcher.find()) {
 			String control = matcher.group(2).trim();
-			String predicateName = "P_" + predicateCounter.getAndIncrement();
-			return new PredicateInfo(predicateName, control, "WHILE",
-					StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
-					StringUtils.join(predicateName, "=", control, ";"),
-					StringUtils.join(matcher.group(1), predicateName, matcher.group(3), "{"), null, null);
+			if (!StringUtils.equals("true", control)) {
+				String predicateName = "P_" + predicateCounter.getAndIncrement();
+				return new PredicateInfo(predicateName, control, "WHILE",
+						StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
+						StringUtils.join(predicateName, "=", control, ";"),
+						StringUtils.join(matcher.group(1), predicateName, matcher.group(3), "{"), null, null);
+			}
 		}
 		return null;
 	}
@@ -130,11 +192,13 @@ public class PredicateParser {
 		Matcher matcher = DO_WHILE_PATTERN.matcher(statement);
 		if (matcher.find()) {
 			String control = matcher.group(2).trim();
-			String predicateName = "P_" + predicateCounter.getAndIncrement();
-			return new PredicateInfo(predicateName, control, "DO-WHILE",
-					StringUtils.join("boolean", " ", predicateName, ";"),
-					StringUtils.join(predicateName, "=", control, ";"),
-					StringUtils.join(matcher.group(1), predicateName, matcher.group(3)), null, null);
+			if (!StringUtils.equals("true", control)) {
+				String predicateName = "P_" + predicateCounter.getAndIncrement();
+				return new PredicateInfo(predicateName, control, "DO-WHILE",
+						StringUtils.join("boolean", " ", predicateName, " ", "=", "false;"),
+						StringUtils.join(predicateName, "=", control, ";"),
+						StringUtils.join(matcher.group(1), predicateName, matcher.group(3)), null, null);
+			}
 		}
 		return null;
 	}
@@ -234,22 +298,63 @@ public class PredicateParser {
 		ReplacementInfo replacementInfo = replaceStrings(statement);
 		Matcher matcher = TERNARY_STATEMENT_PATTERN_INIT.matcher(replacementInfo.getUpdatedString());
 		if (matcher.find()) {
-			String control = matcher.group(3);
-			// Reverting back the replacements in predicate
-			for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
-				control = control.replaceAll(entry.getKey(), entry.getValue());
-			}
+			String updatedString = replacementInfo.getUpdatedString();
+			int refIndex = updatedString.indexOf("?");
+			if (!areBracketsEqual(updatedString.substring(0, refIndex))) { // The ternary statement is present inside
+																			// parenthesis
+				StringBuilder statementBuilder = new StringBuilder();
+				statementBuilder.append(" )");
+				int count = 1;
+				int index = refIndex - 2;
+				while (index >= 0 && count != 0) {
+					char ch = updatedString.charAt(index);
+					if (ch == '(') {
+						count--;
+					} else if (ch == ')') {
+						count++;
+					}
+					index--;
+					statementBuilder.append(ch);
+				}
+				index++;
 
-			String predicateName = "P_" + predicateCounter.getAndIncrement();
-			String parentStatement = StringUtils.join(matcher.group(1), predicateName, matcher.group(4));
-			// Reverting back the replacements in predicate
-			for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
-				parentStatement = parentStatement.replaceAll(entry.getKey(), entry.getValue());
-			}
+				String control = statementBuilder.reverse().toString();
 
-			return new PredicateInfo(predicateName, control, "TERNARY",
-					StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
-					StringUtils.join(predicateName, "=", control, ";"), parentStatement, null, null);
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					control = control.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				String predicateName = "P_" + predicateCounter.getAndIncrement();
+				String parentStatement = StringUtils.join(updatedString.substring(0, index + 1), predicateName,
+						updatedString.substring(refIndex));
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					parentStatement = parentStatement.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				return new PredicateInfo(predicateName, control, "TERNARY",
+						StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
+						StringUtils.join(predicateName, "=", control, ";"), parentStatement, null, null);
+
+			} else {
+				String control = matcher.group(3);
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					control = control.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				String predicateName = "P_" + predicateCounter.getAndIncrement();
+				String parentStatement = StringUtils.join(matcher.group(1), predicateName, matcher.group(4));
+				// Reverting back the replacements in predicate
+				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
+					parentStatement = parentStatement.replaceAll(entry.getKey(), entry.getValue());
+				}
+
+				return new PredicateInfo(predicateName, control, "TERNARY",
+						StringUtils.join("boolean", " ", predicateName, "=", control, ";"),
+						StringUtils.join(predicateName, "=", control, ";"), parentStatement, null, null);
+			}
 		}
 		return null;
 	}
@@ -294,7 +399,7 @@ public class PredicateParser {
 				StringBuilder statementBuilder = new StringBuilder();
 				statementBuilder.append(" )");
 				int count = 1;
-				int index = refIndex - 3;
+				int index = refIndex - 2;
 				while (index >= 0 && count != 0) {
 					char ch = updatedString.charAt(index);
 					if (ch == '(') {
@@ -315,7 +420,7 @@ public class PredicateParser {
 				}
 
 				String predicateName = "P_" + predicateCounter.getAndIncrement();
-				String parentStatement = StringUtils.join(updatedString.substring(0, index), predicateName,
+				String parentStatement = StringUtils.join(updatedString.substring(0, index + 1), predicateName,
 						updatedString.substring(refIndex));
 				// Reverting back the replacements in predicate
 				for (Entry<String, String> entry : replacementInfo.getReplacementMap().entrySet()) {
@@ -390,24 +495,25 @@ public class PredicateParser {
 				Matcher matcher = SWITCH_CASE_PATTERN.matcher(line.trim());
 				String operand = "";
 				if (matcher.find()) {
-					operand = matcher.group(1);
-				}
+					operand = matcher.group(1) == null ? "" : matcher.group(1).trim();
+					List<String> body = new ArrayList<>();
+					boolean withBreak = false;
 
-				List<String> body = new ArrayList<>();
-				boolean withBreak = false;
-
-				lineCounter++;
-				while (lineCounter < totalInnerBodyLines
-						&& IndentSpaceParser.getIndentSpacesCount(switchBodyLines.get(lineCounter)) > spaceCount) {
-					if (switchBodyLines.get(lineCounter).trim().equals("break;")) {
-						withBreak = true;
+					lineCounter++;
+					while (lineCounter < totalInnerBodyLines
+							&& IndentSpaceParser.getIndentSpacesCount(switchBodyLines.get(lineCounter)) > spaceCount) {
+						if (switchBodyLines.get(lineCounter).trim().equals("break;")) {
+							withBreak = true;
+							lineCounter++;
+							break;
+						}
+						body.add(switchBodyLines.get(lineCounter));
 						lineCounter++;
-						break;
 					}
-					body.add(switchBodyLines.get(lineCounter));
+					cases.add(new Case(operand, body, withBreak));
+				} else {
 					lineCounter++;
 				}
-				cases.add(new Case(operand, body, withBreak));
 			}
 		}
 		return cases;

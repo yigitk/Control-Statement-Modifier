@@ -10,6 +10,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.apache.commons.lang3.StringUtils;
@@ -23,6 +25,7 @@ import com.parse.models.Case;
 import com.parse.models.OperandType;
 import com.parse.models.PredicateInfo;
 import com.parse.utils.IndentSpaceParser;
+import com.parse.utils.JavaFormatter;
 import com.parse.utils.PredicateParser;
 import com.parse.utils.PredicateRecorder;
 
@@ -31,8 +34,11 @@ import com.parse.utils.PredicateRecorder;
  */
 public class TaskExecutor {
 
-	private static Formatter formatter = new Formatter(JavaFormatterOptions.builder().style(Style.GOOGLE).build());
+	private static Formatter gooleFormatter = new Formatter(JavaFormatterOptions.builder().style(Style.GOOGLE).build());
 
+	private static JavaFormatter formatter = new JavaFormatter();
+
+	private static final Pattern INITIALIZATION_PATTERN = Pattern.compile("^(final )?(\\w+) ([\\w_]+)\\;$");
 	/**
 	 * The list of predicate information
 	 */
@@ -55,16 +61,18 @@ public class TaskExecutor {
 
 		// The statement might be present in multiple lines, thus merging all
 		StringBuilder statementBuilder = new StringBuilder();
-		statementBuilder.append(removeComment(lines.get(startPos)));
+		statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 		startPos++;
 
-		while (startPos < totalLines
-				&& IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount + 4) {
-			statementBuilder.append(removeComment(lines.get(startPos)));
+		while (startPos < totalLines && (lines.get(startPos).trim().startsWith("//")
+				|| lines.get(startPos).trim().startsWith("/*") || lines.get(startPos).trim().startsWith("*")
+				|| IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount + 4)) {
+			statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 			startPos++;
 		}
 
-		PredicateInfo predicateInfo = PredicateParser.processForStatement(statementBuilder.toString());
+		String statement = removeMultilineComment(statementBuilder.toString());
+		PredicateInfo predicateInfo = PredicateParser.processForStatement(statement);
 
 		if (predicateInfo != null) {
 			predicateInfoList.add(predicateInfo);
@@ -73,15 +81,16 @@ public class TaskExecutor {
 			updatedLines.add(spaces + predicateInfo.getInitializationStatement());
 			updatedLines.add(spaces + predicateInfo.getParentStatement());
 		} else {
-			updatedLines.add(spaces + statementBuilder.toString());
+			updatedLines.add(spaces + statement);
 			return startPos - 1;
 		}
+
 		List<String> innerBodyLines = new ArrayList<>();
 		int bodyLineCounter = startPos;
 		while (bodyLineCounter < totalLines) {
 			String line = lines.get(bodyLineCounter);
 			if (StringUtils.isNotBlank(line.trim())) {
-				if (IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
+				if (line.startsWith("//") || IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
 					innerBodyLines.add(line);
 				} else {
 					break;
@@ -98,7 +107,7 @@ public class TaskExecutor {
 
 		if (bodyLineCounter < totalLines
 				&& IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) == indentedSpaceCount
-				&& lines.get(bodyLineCounter).trim().equals("}")) {
+				&& lines.get(bodyLineCounter).trim().matches("}( //.*)?")) {
 			updatedLines.add(lines.get(bodyLineCounter));
 		} else {
 			bodyLineCounter--;
@@ -125,28 +134,34 @@ public class TaskExecutor {
 
 		// The statement might be present in multiple lines, thus merging all
 		StringBuilder statementBuilder = new StringBuilder();
-		statementBuilder.append(removeComment(lines.get(startPos)));
+		statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 		startPos++;
 
-		while (startPos < totalLines
-				&& IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount + 4) {
-			statementBuilder.append(removeComment(lines.get(startPos)));
+		while (startPos < totalLines && (lines.get(startPos).trim().startsWith("//")
+				|| lines.get(startPos).trim().startsWith("/*") || lines.get(startPos).trim().startsWith("*")
+				|| IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount + 4)) {
+			statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 			startPos++;
 		}
 
-		PredicateInfo predicateInfo = PredicateParser.processWhileStatement(statementBuilder.toString());
+		String statement = removeMultilineComment(statementBuilder.toString());
+		PredicateInfo predicateInfo = PredicateParser.processWhileStatement(statement);
 
 		if (predicateInfo != null) {
 			predicateInfoList.add(predicateInfo);
 			updatedLines.add(spaces + predicateInfo.getInitializationStatement());
 			updatedLines.add(spaces + predicateInfo.getParentStatement());
+		} else {
+			updatedLines.add(spaces + statement);
+			return startPos - 1;
 		}
+
 		List<String> innerBodyLines = new ArrayList<>();
 		int bodyLineCounter = startPos;
 		while (bodyLineCounter < totalLines) {
 			String line = lines.get(bodyLineCounter);
 			if (StringUtils.isNotBlank(line.trim())) {
-				if (IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
+				if (line.startsWith("//") || IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
 					innerBodyLines.add(line);
 				} else {
 					break;
@@ -162,7 +177,7 @@ public class TaskExecutor {
 
 		if (bodyLineCounter < totalLines
 				&& IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) == indentedSpaceCount
-				&& lines.get(bodyLineCounter).trim().equals("}")) {
+				&& lines.get(bodyLineCounter).trim().matches("}( //.*)?")) {
 			updatedLines.add(lines.get(bodyLineCounter));
 		} else {
 			bodyLineCounter--;
@@ -193,7 +208,7 @@ public class TaskExecutor {
 		while (bodyLineCounter < totalLines) {
 			String line = lines.get(bodyLineCounter);
 			if (StringUtils.isNotBlank(line.trim())) {
-				if (IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
+				if (line.startsWith("//") || IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
 					innerBodyLines.add(line);
 				} else {
 					break;
@@ -206,20 +221,26 @@ public class TaskExecutor {
 
 		// The statement might be present in multiple lines, thus merging all
 		StringBuilder statementBuilder = new StringBuilder();
-		statementBuilder.append(removeComment(lines.get(bodyLineCounter)));
+		statementBuilder.append(removeSingleLineComment(lines.get(bodyLineCounter)));
 		bodyLineCounter++;
 
-		while (bodyLineCounter < totalLines
-				&& IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) > indentedSpaceCount + 4) {
-			statementBuilder.append(removeComment(lines.get(bodyLineCounter)));
+		while (bodyLineCounter < totalLines && (lines.get(bodyLineCounter).trim().startsWith("//")
+				|| lines.get(bodyLineCounter).trim().startsWith("/*")
+				|| lines.get(bodyLineCounter).trim().startsWith("*")
+				|| IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) > indentedSpaceCount + 4)) {
+			statementBuilder.append(removeSingleLineComment(lines.get(bodyLineCounter)));
 			bodyLineCounter++;
 		}
 
-		PredicateInfo predicateInfo = PredicateParser.processDoWhileStatement(statementBuilder.toString());
+		String statement = removeMultilineComment(statementBuilder.toString());
+		PredicateInfo predicateInfo = PredicateParser.processDoWhileStatement(statement);
 		if (predicateInfo != null) {
 			predicateInfoList.add(predicateInfo);
 			updatedLines.add(spaces + "\t" + predicateInfo.getReuseStatement());
 			updatedLines.add(spaces + predicateInfo.getParentStatement());
+		} else {
+			updatedLines.add(spaces + statement);
+			return bodyLineCounter - 1;
 		}
 		updatedLines.add(pos, spaces + predicateInfo.getInitializationStatement());
 		return bodyLineCounter - 1;
@@ -231,13 +252,21 @@ public class TaskExecutor {
 	 * @param line The line
 	 * @return The stripped line
 	 */
-	private static String removeComment(String line) {
+	private static String removeSingleLineComment(String line) {
 
 		line = line.trim();
 		if (line.contains("//")) {
 			return line.substring(0, line.lastIndexOf("//")).trim();
 		}
 		return line;
+	}
+
+	/**
+	 * Removes multi-line comments from the code
+	 */
+	private static String removeMultilineComment(String code) {
+
+		return code.replaceAll("/\\*[^~]*\\*/", "");
 	}
 
 	/**
@@ -258,16 +287,19 @@ public class TaskExecutor {
 
 		// The statement might be present in multiple lines, thus merging all
 		StringBuilder statementBuilder = new StringBuilder();
-		statementBuilder.append(removeComment(lines.get(startPos)));
+		statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 		startPos++;
 
 		while (startPos < totalLines
-				&& IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount + 4) {
-			statementBuilder.append(removeComment(lines.get(startPos)));
+				&& (lines.get(startPos).trim().startsWith("//") || StringUtils.isEmpty(lines.get(startPos).trim())
+						|| lines.get(startPos).trim().startsWith("/*") || lines.get(startPos).trim().startsWith("*")
+						|| IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount + 4)) {
+			statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 			startPos++;
 		}
 
-		PredicateInfo predicateInfo = PredicateParser.processIfStatement(statementBuilder.toString());
+		String statement = removeMultilineComment(statementBuilder.toString());
+		PredicateInfo predicateInfo = PredicateParser.processIfStatement(statement);
 
 		if (predicateInfo != null) {
 			predicateInfoList.add(predicateInfo);
@@ -279,7 +311,7 @@ public class TaskExecutor {
 		while (bodyLineCounter < totalLines) {
 			String line = lines.get(bodyLineCounter);
 			if (StringUtils.isNotBlank(line.trim())) {
-				if (IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
+				if (line.startsWith("//") || IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
 					innerBodyLines.add(line);
 				} else {
 					break;
@@ -293,7 +325,7 @@ public class TaskExecutor {
 		if (bodyLineCounter < totalLines
 				&& IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) == indentedSpaceCount) {
 			String line = lines.get(bodyLineCounter).trim();
-			if (line.equals("}")) {
+			if (line.matches("}( //.*)?")) {
 				updatedLines.add("}");
 				return bodyLineCounter;
 			} else {
@@ -333,16 +365,20 @@ public class TaskExecutor {
 
 			// The statement might be present in multiple lines, thus merging all
 			StringBuilder statementBuilder = new StringBuilder();
-			statementBuilder.append(removeComment(lines.get(bodyLineCounter)));
+			statementBuilder.append(removeSingleLineComment(lines.get(bodyLineCounter)));
 			bodyLineCounter++;
 
-			while (bodyLineCounter < totalLines
-					&& IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) > indentedSpaceCount + 4) {
-				statementBuilder.append(removeComment(lines.get(bodyLineCounter)));
+			while (bodyLineCounter < totalLines && (lines.get(bodyLineCounter).trim().startsWith("//")
+					|| StringUtils.isEmpty(lines.get(bodyLineCounter).trim())
+					|| lines.get(bodyLineCounter).trim().startsWith("/*")
+					|| lines.get(bodyLineCounter).trim().startsWith("*")
+					|| IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) > indentedSpaceCount + 4)) {
+				statementBuilder.append(removeSingleLineComment(lines.get(bodyLineCounter)));
 				bodyLineCounter++;
 			}
 
-			PredicateInfo predicateInfo = PredicateParser.processElseIfStatement(statementBuilder.toString());
+			String statement = removeMultilineComment(statementBuilder.toString());
+			PredicateInfo predicateInfo = PredicateParser.processElseIfStatement(statement);
 
 			if (predicateInfo != null) {
 				predicateInfoList.add(predicateInfo);
@@ -354,7 +390,7 @@ public class TaskExecutor {
 			while (bodyLineCounter < totalLines) {
 				line = lines.get(bodyLineCounter);
 				if (StringUtils.isNotBlank(line.trim())) {
-					if (IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
+					if (line.startsWith("//") || IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
 						innerBodyLines.add(line);
 					} else {
 						break;
@@ -368,7 +404,7 @@ public class TaskExecutor {
 			if (bodyLineCounter < totalLines
 					&& IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) == indentedSpaceCount) {
 				line = lines.get(bodyLineCounter).trim();
-				if (line.equals("}")) {
+				if (line.matches("}( //.*)?")) {
 					updatedLines.add("}");
 					return bodyLineCounter;
 				} else {
@@ -401,12 +437,15 @@ public class TaskExecutor {
 
 		// The statement might be present in multiple lines, thus merging all
 		StringBuilder statementBuilder = new StringBuilder();
-		statementBuilder.append(removeComment(lines.get(startPos)));
+		statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 		startPos++;
 
 		int comparisonSpace = isReturnStatement ? indentedSpaceCount - 1 : indentedSpaceCount;
-		while (startPos < totalLines && IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > comparisonSpace) {
-			statementBuilder.append(removeComment(lines.get(startPos)));
+
+		while (startPos < totalLines && (lines.get(startPos).trim().startsWith("//")
+				|| lines.get(startPos).trim().startsWith("/*") || lines.get(startPos).trim().startsWith("*")
+				|| IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > comparisonSpace)) {
+			statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 			startPos++;
 		}
 
@@ -453,7 +492,7 @@ public class TaskExecutor {
 			while (bodyLineCounter < totalLines) {
 				line = lines.get(bodyLineCounter);
 				if (StringUtils.isNotBlank(line.trim())) {
-					if (IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
+					if (line.startsWith("//") || IndentSpaceParser.getIndentSpacesCount(line) > indentedSpaceCount) {
 						innerBodyLines.add(line);
 					} else {
 						break;
@@ -467,7 +506,7 @@ public class TaskExecutor {
 			if (bodyLineCounter < totalLines
 					&& IndentSpaceParser.getIndentSpacesCount(lines.get(bodyLineCounter)) == indentedSpaceCount) {
 				line = lines.get(bodyLineCounter).trim();
-				if (line.equals("}")) {
+				if (line.matches("}( //.*)?")) {
 					updatedLines.add("}");
 					return bodyLineCounter;
 				} else {
@@ -553,11 +592,13 @@ public class TaskExecutor {
 
 		// The statement might be present in multiple lines, thus merging all
 		StringBuilder statementBuilder = new StringBuilder();
-		statementBuilder.append(removeComment(lines.get(startPos)));
+		statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 		startPos++;
 
-		while (IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) >= indentedSpaceCount + 4) {
-			statementBuilder.append(removeComment(lines.get(startPos)));
+		while (startPos < totalLines && (lines.get(startPos).trim().startsWith("//")
+				|| lines.get(startPos).trim().startsWith("/*") || lines.get(startPos).trim().startsWith("*")
+				|| IndentSpaceParser.getIndentSpacesCount(lines.get(startPos)) > indentedSpaceCount + 4)) {
+			statementBuilder.append(removeSingleLineComment(lines.get(startPos)));
 			startPos++;
 		}
 
@@ -566,13 +607,22 @@ public class TaskExecutor {
 
 			List<String> innerBodyLines = new ArrayList<>();
 			int bodyLineCounter = startPos;
+			int count = 1;
 			while (bodyLineCounter < totalLines) {
 				String line = lines.get(bodyLineCounter);
 				if (StringUtils.isNotBlank(line.trim())) {
 					if (!StringUtils.equals(spaces + line.trim(), spaces + "}")) {
+						if (line.trim().endsWith("{")) {
+							count++;
+						}
 						innerBodyLines.add(line);
 					} else {
-						break;
+						count--;
+						if (count == 0) {
+							break;
+						} else {
+							innerBodyLines.add(line);
+						}
 					}
 				}
 				bodyLineCounter++;
@@ -652,6 +702,52 @@ public class TaskExecutor {
 	}
 
 	/**
+	 * Processes the initialization statement
+	 * 
+	 * @param statement The statement
+	 * @return The initialization statement
+	 */
+	private static String processInitializationStatement(String statement) {
+
+		Matcher matcher = INITIALIZATION_PATTERN.matcher(statement.trim());
+		if (matcher.find()) {
+			String dataType = matcher.group(2);
+			String value = "";
+			switch (dataType) {
+			case "int":
+				value = "0";
+				break;
+			case "long":
+				value = "0l";
+				break;
+			case "short":
+				value = "0";
+				break;
+			case "byte":
+				value = "0";
+				break;
+			case "float":
+				value = "0.0f";
+				break;
+			case "boolean":
+				value = "false";
+				break;
+			case "char":
+				value = "'a'";
+				break;
+			case "double":
+				value = "0d";
+				break;
+			}
+
+			if (StringUtils.isNotBlank(value)) {
+				return StringUtils.join(dataType, " ", matcher.group(3), "=", value, ";");
+			}
+		}
+		return statement;
+	}
+
+	/**
 	 * Processes the lines of code
 	 * 
 	 * @param lines The lines
@@ -671,12 +767,8 @@ public class TaskExecutor {
 				i = processDoWhileLoop(lines, updatedLines, i, totalLines);
 			} else if (lines.get(i).trim().startsWith(Keywords.IF)) {
 				i = processIfElseifElse(lines, updatedLines, i, totalLines);
-			} else if (lines.get(i).trim().matches("^(\\w+ )?\\w+ \\=.*")) {
-				i = processTernaryAssignmentIfFound(lines, updatedLines, i, totalLines, false);
-			} else if (lines.get(i).trim().matches("^return.*")) {
-				i = processTernaryAssignmentIfFound(lines, updatedLines, i, totalLines, true);
-			} else if (lines.get(i).trim().startsWith(Keywords.SWITCH)) {
-				i = processSwitchStatements(lines, updatedLines, i, totalLines);
+			} else if (lines.get(i).trim().matches("^(final )?\\w+ [\\w_]+\\;$")) {
+				updatedLines.add(processInitializationStatement(lines.get(i)));
 			} else {
 				updatedLines.add(lines.get(i));
 			}
@@ -710,7 +802,8 @@ public class TaskExecutor {
 	private static void processPath(Path inputFilePath, Path outputPath) {
 
 		try {
-			String formattedJava = formatter.formatSource(new String(Files.readAllBytes(inputFilePath)));
+			System.out.println("Processing " + inputFilePath.toString());
+			String formattedJava = formatter.format(new String(Files.readAllBytes(inputFilePath)));
 			predicateInfoList = new ArrayList<>();
 			List<String> updatedLines = process(Arrays.asList(formattedJava.split("\n")));
 
@@ -720,13 +813,15 @@ public class TaskExecutor {
 				codeBuilder.append(line);
 				codeBuilder.append("\n");
 			}
-			String formattedUpdatedCode = formatter.formatSource(codeBuilder.toString());
+			String formattedUpdatedCode = gooleFormatter.formatSource(codeBuilder.toString());
 			saveUpdatedCode(formattedUpdatedCode, inputFilePath);
 
 			// Creating the predicates file
 			PredicateRecorder.create(inputFilePath, outputPath, predicateInfoList);
-		} catch (FormatterException | IOException exception) {
-			System.out.println("Error formatting the code.");
+			System.out.println("COMPLETED.");
+		} catch (IOException | FormatterException exception) {
+			System.out.println("Error formatting the code. File: " + inputFilePath.toString() + ", Reason: "
+					+ exception.getLocalizedMessage());
 		}
 	}
 

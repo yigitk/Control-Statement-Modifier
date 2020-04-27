@@ -32,14 +32,6 @@ public class PredicateRecorder {
 		// Its a utility class. Thus instantiation is not allowed.
 	}
 
-	static {
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter("predicates.txt"))) {
-			writer.append("");
-		} catch (IOException ioException) {
-			System.out.println("Error recording the predicates.");
-		}
-	}
-
 	/**
 	 * Gets the file name
 	 * 
