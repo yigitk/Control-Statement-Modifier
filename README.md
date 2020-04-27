@@ -11,3 +11,7 @@ Outputs:
 
 - Any .java file with it's predicates ordered from top to bottom; P\_0 ... P\_N, where N is the number of predicates in a single file.
 - predicates.txt, shows the predicate name, predicate evaluation cause and line number. 
+
+Requirements:
+- Apache Maven 3.6+ - http://maven.apache.org/
+- Java 8+ - https://www.java.com/en/download/
