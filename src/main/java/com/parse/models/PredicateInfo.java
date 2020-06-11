@@ -11,52 +11,33 @@ public class PredicateInfo {
 	private String name;
 
 	/**
-	 * The predicate control
-	 */
-	private String control;
-
-	/**
 	 * The predicate type
 	 */
 	private String type;
 
 	/**
+	 * The predicate control
+	 */
+	private String control;
+
+	/**
 	 * The predicate initialization statement
 	 */
-	private String initializationStatement;
+	private String predicateInitStatement;
 
 	/**
-	 * The predicate reuse statement. Its used inside the loop control statements.
+	 * The converted statement
 	 */
-	private String reuseStatement;
+	private String convertedStatement;
 
-	/**
-	 * The parent statement inside which the predicate is used.
-	 */
-	private String parentStatement;
-
-	/**
-	 * The variable initialization statement
-	 */
-	private String varInitializationStatement;
-
-	/**
-	 * The variable change statement
-	 */
-	private String varChangeStatement;
-
-	public PredicateInfo(String name, String control, String type, String initializationStatement,
-			String reuseStatement, String parentStatement, String varInitializationStatement,
-			String varChangeStatement) {
+	public PredicateInfo(String name, String type, String control, String predicateInitStatement,
+			String convertedStatement) {
 		super();
 		this.name = name;
-		this.control = control;
 		this.type = type;
-		this.initializationStatement = initializationStatement;
-		this.reuseStatement = reuseStatement;
-		this.parentStatement = parentStatement;
-		this.varInitializationStatement = varInitializationStatement;
-		this.varChangeStatement = varChangeStatement;
+		this.control = control;
+		this.predicateInitStatement = predicateInitStatement;
+		this.convertedStatement = convertedStatement;
 	}
 
 	public String getName() {
@@ -67,14 +48,6 @@ public class PredicateInfo {
 		this.name = name;
 	}
 
-	public String getControl() {
-		return control;
-	}
-
-	public void setControl(String control) {
-		this.control = control;
-	}
-
 	public String getType() {
 		return type;
 	}
@@ -83,43 +56,27 @@ public class PredicateInfo {
 		this.type = type;
 	}
 
-	public String getInitializationStatement() {
-		return initializationStatement;
+	public String getControl() {
+		return control;
 	}
 
-	public void setInitializationStatement(String initializationStatement) {
-		this.initializationStatement = initializationStatement;
+	public void setControl(String control) {
+		this.control = control;
 	}
 
-	public String getReuseStatement() {
-		return reuseStatement;
+	public String getPredicateInitStatement() {
+		return predicateInitStatement;
 	}
 
-	public void setReuseStatement(String reuseStatement) {
-		this.reuseStatement = reuseStatement;
+	public void setPredicateInitStatement(String predicateInitStatement) {
+		this.predicateInitStatement = predicateInitStatement;
 	}
 
-	public String getParentStatement() {
-		return parentStatement;
+	public String getConvertedStatement() {
+		return convertedStatement;
 	}
 
-	public void setParentStatement(String parentStatement) {
-		this.parentStatement = parentStatement;
-	}
-
-	public String getVarInitializationStatement() {
-		return varInitializationStatement;
-	}
-
-	public void setVarInitializationStatement(String varInitializationStatement) {
-		this.varInitializationStatement = varInitializationStatement;
-	}
-
-	public String getVarChangeStatement() {
-		return varChangeStatement;
-	}
-
-	public void setVarChangeStatement(String varChangeStatement) {
-		this.varChangeStatement = varChangeStatement;
+	public void setConvertedStatement(String convertedStatement) {
+		this.convertedStatement = convertedStatement;
 	}
 }
